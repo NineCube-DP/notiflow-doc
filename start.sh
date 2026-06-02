@@ -127,6 +127,9 @@ else
     # sed -i.bak works on both BSD (macOS) and GNU (Linux/WSL) sed
     sed -i.bak "s|^POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=${DBPASS}|" .env
     sed -i.bak "s|^JWT_SECRET=.*|JWT_SECRET=${JWT}|"                  .env
+
+    DASHPORT=$(get_env DASHBOARD_PORT 3080)
+    sed -i.bak "s|^CORS_ORIGINS=.*|CORS_ORIGINS=http://localhost:${DASHPORT}|" .env
     rm -f .env.bak
 
     warn ".env created with auto-generated secrets."
