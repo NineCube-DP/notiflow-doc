@@ -55,24 +55,35 @@ command -v openssl >/dev/null 2>&1 || die "openssl is required but not installed
 # Detect container runtime (Docker preferred, Podman as fallback)
 # For each runtime also detect the compose command (v2 plugin or v1 standalone).
 COMPOSE=""
+DOCKER_DAEMON_WARN=""
+
 if command -v docker >/dev/null 2>&1; then
-    if docker compose version >/dev/null 2>&1; then
-        COMPOSE="docker compose"
-    elif command -v docker-compose >/dev/null 2>&1; then
-        COMPOSE="docker-compose"
+    if docker info >/dev/null 2>&1; then
+        if docker compose version >/dev/null 2>&1; then
+            COMPOSE="docker compose"
+        elif command -v docker-compose >/dev/null 2>&1; then
+            COMPOSE="docker-compose"
+        else
+            die "Docker found but Compose is not installed (tried 'docker compose' and 'docker-compose')."
+        fi
     else
-        die "Docker found but Compose is not installed (tried 'docker compose' and 'docker-compose')."
+        DOCKER_DAEMON_WARN="Docker binary found but daemon is not running — falling back to Podman."
     fi
-elif command -v podman >/dev/null 2>&1; then
-    if podman compose version >/dev/null 2>&1; then
-        COMPOSE="podman compose"
-    elif command -v podman-compose >/dev/null 2>&1; then
-        COMPOSE="podman-compose"
+fi
+
+if [ -z "$COMPOSE" ]; then
+    [ -n "$DOCKER_DAEMON_WARN" ] && warn "$DOCKER_DAEMON_WARN"
+    if command -v podman >/dev/null 2>&1; then
+        if podman compose version >/dev/null 2>&1; then
+            COMPOSE="podman compose"
+        elif command -v podman-compose >/dev/null 2>&1; then
+            COMPOSE="podman-compose"
+        else
+            die "Podman found but podman-compose is not installed. Install it with: pip3 install podman-compose"
+        fi
     else
-        die "Podman found but podman-compose is not installed. Install it with: pip3 install podman-compose"
+        die "No container runtime found. Install Docker (https://docs.docker.com/get-docker/) or Podman (https://podman.io/getting-started/installation)."
     fi
-else
-    die "No container runtime found. Install Docker (https://docs.docker.com/get-docker/) or Podman (https://podman.io/getting-started/installation)."
 fi
 
 log "Runtime: $COMPOSE"
