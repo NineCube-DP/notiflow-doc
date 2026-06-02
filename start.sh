@@ -31,6 +31,23 @@ print_banner() {
 
 print_banner
 
+# ─── Architecture ─────────────────────────────────────────────────────────────
+OS=$(uname -s)
+ARCH=$(uname -m)
+
+case "$ARCH" in
+    arm64|aarch64) PLATFORM="linux/arm64"  ;;
+    x86_64|amd64)  PLATFORM="linux/amd64"  ;;
+    *)             PLATFORM=""             ;;
+esac
+
+if [ -n "$PLATFORM" ]; then
+    export DOCKER_DEFAULT_PLATFORM="$PLATFORM"
+    log "Architecture: $ARCH ($PLATFORM)"
+else
+    warn "Unknown architecture '$ARCH' — using runtime default platform."
+fi
+
 # ─── Preflight ────────────────────────────────────────────────────────────────
 command -v curl    >/dev/null 2>&1 || die "curl is required but not installed."
 command -v openssl >/dev/null 2>&1 || die "openssl is required but not installed."
@@ -59,6 +76,20 @@ else
 fi
 
 log "Runtime: $COMPOSE"
+
+# Podman on macOS needs a running VM (podman machine).
+# Start the default machine if it exists but isn't running; init+start if it doesn't exist yet.
+if [[ "$COMPOSE" == podman* ]] && [[ "$OS" == "Darwin" ]]; then
+    if podman machine list --format '{{.Running}}' 2>/dev/null | grep -q 'true'; then
+        log "Podman machine is already running."
+    elif podman machine list --format '{{.Name}}' 2>/dev/null | grep -q '.'; then
+        log "Starting Podman machine ..."
+        podman machine start
+    else
+        log "Initializing Podman machine ..."
+        podman machine init --now
+    fi
+fi
 
 # ─── Setup directory ──────────────────────────────────────────────────────────
 mkdir -p "$INSTALL_DIR"
