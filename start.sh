@@ -18,18 +18,33 @@ rand_pass()   { openssl rand -hex 20; }        # 40-char hex, safe for DB passwo
 rand_secret() { openssl rand -base64 48; }     # base64, safe for JWT (no | \ & in output)
 
 # ─── Preflight ────────────────────────────────────────────────────────────────
-command -v docker  >/dev/null 2>&1 || die "Docker is not installed. See https://docs.docker.com/get-docker/"
 command -v curl    >/dev/null 2>&1 || die "curl is required but not installed."
 command -v openssl >/dev/null 2>&1 || die "openssl is required but not installed."
 
-# Support both Compose v2 (plugin) and v1 (standalone binary)
-if docker compose version >/dev/null 2>&1; then
-    COMPOSE="docker compose"
-elif command -v docker-compose >/dev/null 2>&1; then
-    COMPOSE="docker-compose"
+# Detect container runtime (Docker preferred, Podman as fallback)
+# For each runtime also detect the compose command (v2 plugin or v1 standalone).
+COMPOSE=""
+if command -v docker >/dev/null 2>&1; then
+    if docker compose version >/dev/null 2>&1; then
+        COMPOSE="docker compose"
+    elif command -v docker-compose >/dev/null 2>&1; then
+        COMPOSE="docker-compose"
+    else
+        die "Docker found but Compose is not installed (tried 'docker compose' and 'docker-compose')."
+    fi
+elif command -v podman >/dev/null 2>&1; then
+    if podman compose version >/dev/null 2>&1; then
+        COMPOSE="podman compose"
+    elif command -v podman-compose >/dev/null 2>&1; then
+        COMPOSE="podman-compose"
+    else
+        die "Podman found but podman-compose is not installed. Install it with: pip3 install podman-compose"
+    fi
 else
-    die "Docker Compose is not installed (tried 'docker compose' and 'docker-compose')."
+    die "No container runtime found. Install Docker (https://docs.docker.com/get-docker/) or Podman (https://podman.io/getting-started/installation)."
 fi
+
+log "Runtime: $COMPOSE"
 
 # ─── Setup directory ──────────────────────────────────────────────────────────
 mkdir -p "$INSTALL_DIR"
