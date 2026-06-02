@@ -17,6 +17,20 @@ get_env() { grep -E "^${1}=" "$INSTALL_DIR/.env" 2>/dev/null | cut -d= -f2 || ec
 rand_pass()   { openssl rand -hex 20; }        # 40-char hex, safe for DB passwords
 rand_secret() { openssl rand -base64 48; }     # base64, safe for JWT (no | \ & in output)
 
+# ─── Banner ───────────────────────────────────────────────────────────────────
+print_banner() {
+    printf '\n'
+    printf '\033[1;37m _   _       _   _ \033[1;34m ______ _               \033[0m\n'
+    printf '\033[1;37m| \\ | |     | | (_)\033[1;34m|  ____| |              \033[0m\n'
+    printf '\033[1;37m|  \\| | ___ | |_ _ \033[1;34m| |__  | | _____      __\033[0m\n'
+    printf '\033[1;37m| . ` |/ _ \\| __| |\033[1;34m|  __| | |/ _ \\ \\ /\\ / /\033[0m\n'
+    printf '\033[1;37m| |\\  | (_) | |_| |\033[1;34m| |    | | (_) \\ V  V / \033[0m\n'
+    printf '\033[1;37m|_| \\_|\\___/ \\__|_|\033[1;34m|_|    |_|\\___/ \\_/\\_/  \033[0m\n'
+    printf '\n'
+}
+
+print_banner
+
 # ─── Preflight ────────────────────────────────────────────────────────────────
 command -v curl    >/dev/null 2>&1 || die "curl is required but not installed."
 command -v openssl >/dev/null 2>&1 || die "openssl is required but not installed."
