@@ -147,16 +147,44 @@ if [ -f .env ]; then
         2)
             log "Downloading latest .env.example ..."
             curl -fsSL "$REPO_RAW/.env.example" -o .env.example
-            rm -f .env
-            cp .env.example .env
-            JWT=$(rand_secret)
-            DBPASS=$(rand_pass)
-            sed -i.bak "s|^POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=${DBPASS}|" .env
-            sed -i.bak "s|^JWT_SECRET=.*|JWT_SECRET=${JWT}|"                  .env
-            DASHPORT=$(get_env DASHBOARD_PORT 3080)
-            sed -i.bak "s|^CORS_ORIGINS=.*|CORS_ORIGINS=http://localhost:${DASHPORT}|" .env
-            rm -f .env.bak
-            warn ".env regenerated with new secrets."
+
+            # Backup current config
+            BACKUP=".env.backup.$(date +%Y%m%d_%H%M%S)"
+            cp .env "$BACKUP"
+            log "Backed up current config to $BACKUP"
+
+            # Rebase: new template structure, old values preserved where keys match
+            awk '
+                NR==FNR {
+                    if ($0 ~ /^[A-Za-z_][A-Za-z0-9_]*=/) {
+                        eq = index($0, "=")
+                        old[substr($0,1,eq-1)] = substr($0,eq)
+                    }
+                    next
+                }
+                /^[A-Za-z_][A-Za-z0-9_]*=/ {
+                    eq = index($0, "=")
+                    key = substr($0, 1, eq-1)
+                    if (key in old) { print key old[key]; next }
+                }
+                { print }
+            ' "$BACKUP" .env.example > .env
+            log "Config rebased on latest template."
+
+            # Open editor
+            EDITOR_CMD="${EDITOR:-}"
+            for e in nano vi vim; do
+                [ -z "$EDITOR_CMD" ] && command -v "$e" >/dev/null 2>&1 && EDITOR_CMD="$e"
+            done
+            if [ -n "$EDITOR_CMD" ]; then
+                log "Opening .env in ${EDITOR_CMD} — save and quit to continue ..."
+                "$EDITOR_CMD" .env </dev/tty >/dev/tty
+            else
+                warn "No text editor found. Edit $INSTALL_DIR/.env manually, then run:"
+                warn "  $COMPOSE up -d"
+                exit 0
+            fi
+
             log "Restarting NotiFlow with new configuration ..."
             $COMPOSE up -d
             ;;
