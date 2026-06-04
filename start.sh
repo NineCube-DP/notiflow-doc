@@ -118,8 +118,8 @@ if [ -f .env ]; then
     echo "  3) Uninstall   — stop all services and remove data"
     echo "  4) Exit"
     echo ""
-    printf "Choose [1-4]: "
-    read -r MENU_CHOICE
+    printf "Choose [1-4]: " >/dev/tty
+    read -r MENU_CHOICE </dev/tty
 
     case "$MENU_CHOICE" in
         1)
@@ -154,8 +154,8 @@ if [ -f .env ]; then
             ;;
         3)
             warn "This will stop all NotiFlow services and delete $INSTALL_DIR."
-            printf "Type 'yes' to confirm: "
-            read -r CONFIRM
+            printf "Type 'yes' to confirm: " >/dev/tty
+            read -r CONFIRM </dev/tty
             if [ "$CONFIRM" = "yes" ]; then
                 log "Stopping services and removing volumes ..."
                 $COMPOSE down -v
