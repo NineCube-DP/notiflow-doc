@@ -2,6 +2,7 @@
 set -euo pipefail
 
 # ─── Config ───────────────────────────────────────────────────────────────────
+VERSION="1.0.0"
 REPO_RAW="https://raw.githubusercontent.com/NineCube-DP/notiflow-doc/main"
 INSTALL_DIR="${NOTIFLOW_DIR:-$HOME/.notiflow}"
 
@@ -26,6 +27,7 @@ print_banner() {
     printf '\033[1;37m| . ` |/ _ \\| __| |\033[1;34m|  __| | |/ _ \\ \\ /\\ / /\033[0m\n'
     printf '\033[1;37m| |\\  | (_) | |_| |\033[1;34m| |    | | (_) \\ V  V / \033[0m\n'
     printf '\033[1;37m|_| \\_|\\___/ \\__|_|\033[1;34m|_|    |_|\\___/ \\_/\\_/  \033[0m\n'
+    printf "\033[0;90m                              v${VERSION}\033[0m\n"
     printf '\n'
 }
 
@@ -118,8 +120,14 @@ if [ -f .env ]; then
     echo "  3) Uninstall   — stop all services and remove data"
     echo "  4) Exit"
     echo ""
-    printf "Choose [1-4]: " >/dev/tty
-    read -r MENU_CHOICE </dev/tty
+    # Drain any buffered newline left over from launching the script (e.g. curl | bash)
+    read -r -t 0.1 _ </dev/tty 2>/dev/null || true
+
+    MENU_CHOICE=""
+    while [ -z "$MENU_CHOICE" ]; do
+        printf "Choose [1-4]: " >/dev/tty
+        read -r MENU_CHOICE </dev/tty || true
+    done
 
     case "$MENU_CHOICE" in
         1)
