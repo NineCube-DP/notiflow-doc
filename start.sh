@@ -108,6 +108,74 @@ cd "$INSTALL_DIR"
 
 log "Working directory: $INSTALL_DIR"
 
+# ─── Menu (existing installation) ─────────────────────────────────────────────
+if [ -f .env ]; then
+    echo ""
+    log "NotiFlow is already installed."
+    echo ""
+    echo "  1) Update      — pull latest images and restart"
+    echo "  2) Reconfigure — regenerate .env with new secrets"
+    echo "  3) Uninstall   — stop all services and remove data"
+    echo "  4) Exit"
+    echo ""
+    printf "Choose [1-4]: "
+    read -r MENU_CHOICE
+
+    case "$MENU_CHOICE" in
+        1)
+            log "Downloading latest docker-compose.yaml ..."
+            curl -fsSL "$REPO_RAW/docker-compose.yaml" -o docker-compose.yaml
+            log "Pulling latest images ..."
+            $COMPOSE pull
+            log "Restarting NotiFlow ..."
+            $COMPOSE up -d
+            APP_PORT=$(get_env APP_PORT 8080)
+            DASH_PORT=$(get_env DASHBOARD_PORT 3080)
+            echo ""
+            log "NotiFlow is up!"
+            log "  App:       http://localhost:${APP_PORT}"
+            log "  Dashboard: http://localhost:${DASH_PORT}"
+            ;;
+        2)
+            log "Downloading latest .env.example ..."
+            curl -fsSL "$REPO_RAW/.env.example" -o .env.example
+            rm -f .env
+            cp .env.example .env
+            JWT=$(rand_secret)
+            DBPASS=$(rand_pass)
+            sed -i.bak "s|^POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=${DBPASS}|" .env
+            sed -i.bak "s|^JWT_SECRET=.*|JWT_SECRET=${JWT}|"                  .env
+            DASHPORT=$(get_env DASHBOARD_PORT 3080)
+            sed -i.bak "s|^CORS_ORIGINS=.*|CORS_ORIGINS=http://localhost:${DASHPORT}|" .env
+            rm -f .env.bak
+            warn ".env regenerated with new secrets."
+            log "Restarting NotiFlow with new configuration ..."
+            $COMPOSE up -d
+            ;;
+        3)
+            warn "This will stop all NotiFlow services and delete $INSTALL_DIR."
+            printf "Type 'yes' to confirm: "
+            read -r CONFIRM
+            if [ "$CONFIRM" = "yes" ]; then
+                log "Stopping services and removing volumes ..."
+                $COMPOSE down -v
+                log "Removing $INSTALL_DIR ..."
+                rm -rf "$INSTALL_DIR"
+                log "NotiFlow uninstalled."
+            else
+                log "Uninstall aborted."
+            fi
+            ;;
+        4)
+            log "Exiting."
+            ;;
+        *)
+            die "Invalid option."
+            ;;
+    esac
+    exit 0
+fi
+
 # ─── Download files ───────────────────────────────────────────────────────────
 log "Downloading docker-compose.yaml ..."
 curl -fsSL "$REPO_RAW/docker-compose.yaml" -o docker-compose.yaml
