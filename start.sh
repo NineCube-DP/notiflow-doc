@@ -2,21 +2,85 @@
 set -euo pipefail
 
 # ─── Config ───────────────────────────────────────────────────────────────────
-VERSION="1.0.0"
+VERSION="1.1.0"
 REPO_RAW="https://raw.githubusercontent.com/NineCube-DP/notiflow-doc/main"
 INSTALL_DIR="${NOTIFLOW_DIR:-$HOME/.notiflow}"
 
+# ─── TUI ──────────────────────────────────────────────────────────────────────
+RESET='\033[0m'; BOLD='\033[1m'
+RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
+BLUE='\033[1;34m'; WHITE='\033[1;37m'; GRAY='\033[0;90m'
+
+I_OK="✓"; I_ERR="✗"; I_WARN="!"; I_INFO="·"; I_ARROW="▶"
+SPIN_FRAMES=(⠋ ⠙ ⠹ ⠸ ⠼ ⠴ ⠦ ⠧ ⠇ ⠏)
+
+_tw=$(tput cols 2>/dev/null || echo 64)
+TW=$(( _tw > 64 ? 64 : _tw ))
+
+ok()   { printf "  ${GREEN}${I_OK}${RESET}  %s\n"    "$*"; }
+warn() { printf "  ${YELLOW}${I_WARN}${RESET}  %s\n" "$*"; }
+info() { printf "  ${GRAY}${I_INFO}${RESET}  %s\n"   "$*"; }
+die()  { printf "  ${RED}${I_ERR}${RESET}  %s\n" "$*" >&2; exit 1; }
+
+hr() {
+    printf "  ${GRAY}"
+    printf '─%.0s' $(seq 1 $(( TW - 2 )))
+    printf "${RESET}\n"
+}
+
+section() {
+    local label="$1"
+    local dashes=$(( TW - ${#label} - 7 ))
+    [ $dashes -lt 1 ] && dashes=1
+    printf "\n  ${GRAY}─── ${RESET}${BOLD}%s${RESET}${GRAY} $(printf '─%.0s' $(seq 1 $dashes))${RESET}\n\n" "$label"
+}
+
+tui_spin() {
+    local label="$1"; shift
+    local tmpout; tmpout=$(mktemp)
+    local i=0
+    "$@" >"$tmpout" 2>&1 &
+    local pid=$!
+    while kill -0 "$pid" 2>/dev/null; do
+        printf "\r  ${BLUE}%s${RESET}  %s " "${SPIN_FRAMES[$((i % 10))]}" "$label" >/dev/tty
+        sleep 0.08
+        i=$(( i + 1 ))
+    done
+    local rc=0
+    wait "$pid" || rc=$?
+    if [ $rc -eq 0 ]; then
+        printf "\r  ${GREEN}${I_OK}${RESET}  %-50s\n" "$label"
+    else
+        printf "\r  ${RED}${I_ERR}${RESET}  %-50s\n" "$label"
+        cat "$tmpout" >&2
+        rm -f "$tmpout"
+        exit $rc
+    fi
+    rm -f "$tmpout"
+}
+
+draw_menu() {
+    local title="$1"; shift
+    local inner=$(( TW - 6 ))
+    echo
+    printf "  ${GRAY}┌$(printf '─%.0s' $(seq 1 $inner))┐${RESET}\n"
+    if [ -n "$title" ]; then
+        printf "  ${GRAY}│${RESET}  ${BOLD}%-*s${RESET}  ${GRAY}│${RESET}\n" "$(( inner - 4 ))" "$title"
+        printf "  ${GRAY}├$(printf '─%.0s' $(seq 1 $inner))┤${RESET}\n"
+    fi
+    local n=1
+    for item in "$@"; do
+        printf "  ${GRAY}│${RESET}  ${BLUE}[%d]${RESET}  %-*s${GRAY}│${RESET}\n" "$n" "$(( inner - 7 ))" "$item"
+        n=$(( n + 1 ))
+    done
+    printf "  ${GRAY}└$(printf '─%.0s' $(seq 1 $inner))┘${RESET}\n"
+    echo
+}
+
 # ─── Helpers ──────────────────────────────────────────────────────────────────
-RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; NC='\033[0m'
-log()  { echo -e "${GREEN}[notiflow]${NC} $*"; }
-warn() { echo -e "${YELLOW}[notiflow]${NC} $*"; }
-die()  { echo -e "${RED}[notiflow]${NC} $*" >&2; exit 1; }
-
-get_env() { grep -E "^${1}=" "$INSTALL_DIR/.env" 2>/dev/null | cut -d= -f2 || echo "${2}"; }
-
-# hex output avoids any pipeline/filtering issues across platforms
-rand_pass()   { openssl rand -hex 20; }        # 40-char hex, safe for DB passwords
-rand_secret() { openssl rand -base64 48; }     # base64, safe for JWT (no | \ & in output)
+get_env()     { grep -E "^${1}=" "$INSTALL_DIR/.env" 2>/dev/null | cut -d= -f2 || echo "${2}"; }
+rand_pass()   { openssl rand -hex 20; }
+rand_secret() { openssl rand -base64 48; }
 
 # ─── Banner ───────────────────────────────────────────────────────────────────
 print_banner() {
@@ -28,6 +92,7 @@ print_banner() {
     printf '\033[1;37m| |\\  | (_) | |_| |\033[1;34m| |    | | (_) \\ V  V / \033[0m\n'
     printf '\033[1;37m|_| \\_|\\___/ \\__|_|\033[1;34m|_|    |_|\\___/ \\_/\\_/  \033[0m\n'
     printf "\033[0;90m                              v${VERSION}\033[0m\n"
+    hr
     printf '\n'
 }
 
@@ -38,14 +103,14 @@ OS=$(uname -s)
 ARCH=$(uname -m)
 
 case "$ARCH" in
-    arm64|aarch64) PLATFORM="linux/arm64"  ;;
-    x86_64|amd64)  PLATFORM="linux/amd64"  ;;
-    *)             PLATFORM=""             ;;
+    arm64|aarch64) PLATFORM="linux/arm64" ;;
+    x86_64|amd64)  PLATFORM="linux/amd64" ;;
+    *)             PLATFORM=""            ;;
 esac
 
 if [ -n "$PLATFORM" ]; then
     export DOCKER_DEFAULT_PLATFORM="$PLATFORM"
-    log "Architecture: $ARCH ($PLATFORM)"
+    info "Architecture: $ARCH ($PLATFORM)"
 else
     warn "Unknown architecture '$ARCH' — using runtime default platform."
 fi
@@ -54,8 +119,8 @@ fi
 command -v curl    >/dev/null 2>&1 || die "curl is required but not installed."
 command -v openssl >/dev/null 2>&1 || die "openssl is required but not installed."
 
-# Detect container runtime (Docker preferred, Podman as fallback)
-# For each runtime also detect the compose command (v2 plugin or v1 standalone).
+# ─── Runtime detection ────────────────────────────────────────────────────────
+# Docker preferred; falls back to Podman. Checks daemon reachability, not just binary presence.
 COMPOSE=""
 DOCKER_DAEMON_WARN=""
 
@@ -88,18 +153,17 @@ if [ -z "$COMPOSE" ]; then
     fi
 fi
 
-log "Runtime: $COMPOSE"
+info "Runtime: $COMPOSE"
 
-# Podman on macOS needs a running VM (podman machine).
-# Start the default machine if it exists but isn't running; init+start if it doesn't exist yet.
+# ─── Podman machine (macOS) ───────────────────────────────────────────────────
 if [[ "$COMPOSE" == podman* ]] && [[ "$OS" == "Darwin" ]]; then
     if podman machine list --format '{{.Running}}' 2>/dev/null | grep -q 'true'; then
-        log "Podman machine is already running."
+        info "Podman machine is already running."
     elif podman machine list --format '{{.Name}}' 2>/dev/null | grep -q '.'; then
-        log "Starting Podman machine ..."
+        info "Starting Podman machine ..."
         podman machine start
     else
-        log "Initializing Podman machine ..."
+        info "Initializing Podman machine ..."
         podman machine init --now
     fi
 fi
@@ -108,52 +172,60 @@ fi
 mkdir -p "$INSTALL_DIR"
 cd "$INSTALL_DIR"
 
-log "Working directory: $INSTALL_DIR"
+info "Working directory: $INSTALL_DIR"
+echo
 
 # ─── Menu (existing installation) ─────────────────────────────────────────────
 if [ -f .env ]; then
-    echo ""
-    log "NotiFlow is already installed."
-    echo ""
-    echo "  1) Update      — pull latest images and restart"
-    echo "  2) Reconfigure — regenerate .env with new secrets"
-    echo "  3) Uninstall   — stop all services and remove data"
-    echo "  4) Exit"
-    echo ""
-    # Drain any buffered newline left over from launching the script (e.g. curl | bash)
+    printf '\033[2J\033[H'
+    print_banner
+
+    info "Installed at $INSTALL_DIR"
+
+    draw_menu "Manage NotiFlow" \
+        "Update       pull latest & restart" \
+        "Reconfigure  edit configuration" \
+        "Uninstall    remove all data" \
+        "Exit"
+
+    # Drain buffered newline left over from launching the script (e.g. curl | bash)
     read -r -t 0.1 _ </dev/tty 2>/dev/null || true
 
     MENU_CHOICE=""
     while [ -z "$MENU_CHOICE" ]; do
-        printf "Choose [1-4]: " >/dev/tty
+        printf "  ${BLUE}${I_ARROW}${RESET}  Choose [1-4]: " >/dev/tty
         read -r MENU_CHOICE </dev/tty || true
     done
 
+    echo
+
     case "$MENU_CHOICE" in
         1)
-            log "Downloading latest docker-compose.yaml ..."
-            curl -fsSL "$REPO_RAW/docker-compose.yaml" -o docker-compose.yaml
-            log "Pulling latest images ..."
+            section "Updating"
+            tui_spin "Downloading latest compose file" \
+                curl -fsSL "$REPO_RAW/docker-compose.yaml" -o docker-compose.yaml
+            section "Pulling images"
             $COMPOSE pull
-            log "Restarting NotiFlow ..."
+            section "Starting NotiFlow"
             $COMPOSE up -d
             APP_PORT=$(get_env APP_PORT 8080)
             DASH_PORT=$(get_env DASHBOARD_PORT 3080)
-            echo ""
-            log "NotiFlow is up!"
-            log "  App:       http://localhost:${APP_PORT}"
-            log "  Dashboard: http://localhost:${DASH_PORT}"
+            echo
+            hr
+            ok "NotiFlow is up!"
+            info "App         http://localhost:${APP_PORT}"
+            info "Dashboard   http://localhost:${DASH_PORT}"
+            hr
             ;;
         2)
-            log "Downloading latest .env.example ..."
-            curl -fsSL "$REPO_RAW/.env.example" -o .env.example
+            section "Reconfiguring"
+            tui_spin "Downloading latest .env.example" \
+                curl -fsSL "$REPO_RAW/.env.example" -o .env.example
 
-            # Backup current config
             BACKUP=".env.backup.$(date +%Y%m%d_%H%M%S)"
             cp .env "$BACKUP"
-            log "Backed up current config to $BACKUP"
+            ok "Backed up config to $BACKUP"
 
-            # Rebase: new template structure, old values preserved where keys match
             awk '
                 NR==FNR {
                     if ($0 ~ /^[A-Za-z_][A-Za-z0-9_]*=/) {
@@ -169,41 +241,43 @@ if [ -f .env ]; then
                 }
                 { print }
             ' "$BACKUP" .env.example > .env
-            log "Config rebased on latest template."
+            ok "Config rebased on latest template."
 
-            # Open editor
             EDITOR_CMD="${EDITOR:-}"
             for e in nano vi vim; do
                 [ -z "$EDITOR_CMD" ] && command -v "$e" >/dev/null 2>&1 && EDITOR_CMD="$e"
             done
             if [ -n "$EDITOR_CMD" ]; then
-                log "Opening .env in ${EDITOR_CMD} — save and quit to continue ..."
+                info "Opening .env in ${EDITOR_CMD} — save and quit to continue ..."
                 "$EDITOR_CMD" .env </dev/tty >/dev/tty
             else
                 warn "No text editor found. Edit $INSTALL_DIR/.env manually, then run:"
-                warn "  $COMPOSE up -d"
+                info "  $COMPOSE up -d"
                 exit 0
             fi
 
-            log "Restarting NotiFlow with new configuration ..."
+            section "Restarting services"
             $COMPOSE up -d
+            ok "NotiFlow restarted with new configuration."
             ;;
         3)
+            echo
             warn "This will stop all NotiFlow services and delete $INSTALL_DIR."
-            printf "Type 'yes' to confirm: " >/dev/tty
-            read -r CONFIRM </dev/tty
+            printf "  ${BLUE}${I_ARROW}${RESET}  Type 'yes' to confirm: " >/dev/tty
+            read -r CONFIRM </dev/tty || true
+            echo
             if [ "$CONFIRM" = "yes" ]; then
-                log "Stopping services and removing volumes ..."
+                section "Uninstalling"
                 $COMPOSE down -v
-                log "Removing $INSTALL_DIR ..."
+                ok "Services stopped."
                 rm -rf "$INSTALL_DIR"
-                log "NotiFlow uninstalled."
+                ok "NotiFlow uninstalled."
             else
-                log "Uninstall aborted."
+                info "Uninstall aborted."
             fi
             ;;
         4)
-            log "Exiting."
+            info "Exiting."
             ;;
         *)
             die "Invalid option."
@@ -212,51 +286,48 @@ if [ -f .env ]; then
     exit 0
 fi
 
-# ─── Download files ───────────────────────────────────────────────────────────
-log "Downloading docker-compose.yaml ..."
-curl -fsSL "$REPO_RAW/docker-compose.yaml" -o docker-compose.yaml
+# ─── Fresh install ────────────────────────────────────────────────────────────
+section "Installing NotiFlow"
 
-log "Downloading .env.example ..."
-curl -fsSL "$REPO_RAW/.env.example" -o .env.example
+tui_spin "Downloading docker-compose.yaml" \
+    curl -fsSL "$REPO_RAW/docker-compose.yaml" -o docker-compose.yaml
 
-# ─── Create .env ──────────────────────────────────────────────────────────────
-if [ -f .env ]; then
-    log ".env already exists — skipping generation (delete it to reset)."
-else
-    cp .env.example .env
+tui_spin "Downloading .env.example" \
+    curl -fsSL "$REPO_RAW/.env.example" -o .env.example
 
-    JWT=$(rand_secret)
-    DBPASS=$(rand_pass)
+cp .env.example .env
 
-    # sed -i.bak works on both BSD (macOS) and GNU (Linux/WSL) sed
-    sed -i.bak "s|^POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=${DBPASS}|" .env
-    sed -i.bak "s|^JWT_SECRET=.*|JWT_SECRET=${JWT}|"                  .env
+JWT=$(rand_secret)
+DBPASS=$(rand_pass)
 
-    DASHPORT=$(get_env DASHBOARD_PORT 3080)
-    sed -i.bak "s|^CORS_ORIGINS=.*|CORS_ORIGINS=http://localhost:${DASHPORT}|" .env
-    rm -f .env.bak
+sed -i.bak "s|^POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=${DBPASS}|" .env
+sed -i.bak "s|^JWT_SECRET=.*|JWT_SECRET=${JWT}|"                  .env
 
-    warn ".env created with auto-generated secrets."
-    warn "Review $INSTALL_DIR/.env before exposing this service publicly."
-fi
+DASHPORT=$(get_env DASHBOARD_PORT 3080)
+sed -i.bak "s|^CORS_ORIGINS=.*|CORS_ORIGINS=http://localhost:${DASHPORT}|" .env
+rm -f .env.bak
 
-# ─── Pull latest images & start ───────────────────────────────────────────────
-log "Pulling latest images ..."
+ok "Configuration generated."
+warn "Review $INSTALL_DIR/.env before exposing this service publicly."
+
+section "Pulling images"
 $COMPOSE pull
 
-log "Starting NotiFlow services ..."
+section "Starting NotiFlow"
 $COMPOSE up -d
 
 # ─── Done ─────────────────────────────────────────────────────────────────────
 APP_PORT=$(get_env APP_PORT 8080)
-DASH_PORT=$(get_env DASHBOARD_PORT 80)
+DASH_PORT=$(get_env DASHBOARD_PORT 3080)
 
-echo ""
-log "NotiFlow is up!"
-log "  App:       http://localhost:${APP_PORT}"
-log "  Dashboard: http://localhost:${DASH_PORT}"
-echo ""
-log "Useful commands (run from $INSTALL_DIR):"
-log "  View logs : $COMPOSE logs -f"
-log "  Stop      : $COMPOSE down"
-log "  Update    : $COMPOSE pull && $COMPOSE up -d"
+echo
+hr
+ok "NotiFlow is up!"
+info "App         http://localhost:${APP_PORT}"
+info "Dashboard   http://localhost:${DASH_PORT}"
+echo
+info "Useful commands (run from $INSTALL_DIR):"
+info "  View logs : $COMPOSE logs -f"
+info "  Stop      : $COMPOSE down"
+info "  Update    : run this script again"
+hr
