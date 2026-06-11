@@ -13,7 +13,7 @@
 $ErrorActionPreference = 'Stop'
 
 # ─── Config ───────────────────────────────────────────────────────────────────
-$VERSION     = "1.1.0"
+$VERSION     = "1.1.1"
 $REPO_RAW    = "https://raw.githubusercontent.com/NineCube-DP/notiflow-doc/main"
 $INSTALL_DIR = if ($env:NOTIFLOW_DIR) { $env:NOTIFLOW_DIR } else { "$HOME\.notiflow" }
 
@@ -22,13 +22,13 @@ $SPIN_FRAMES = [char[]]'⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
 try   { $TW = [Math]::Min([Console]::WindowWidth, 64) }
 catch { $TW = 64 }
 
-function Write-Ok   { param([string]$msg) Write-Host "  `u{2713}  $msg" -ForegroundColor Green }
+function Write-Ok   { param([string]$msg) Write-Host ("  " + [char]0x2713 + "  $msg") -ForegroundColor Green }
 function Write-Warn { param([string]$msg) Write-Host "  !  $msg" -ForegroundColor Yellow }
-function Write-Info { param([string]$msg) Write-Host "  `u{00B7}  $msg" -ForegroundColor DarkGray }
+function Write-Info { param([string]$msg) Write-Host ("  " + [char]0x00B7 + "  $msg") -ForegroundColor DarkGray }
 
 function Invoke-Die {
     param([string]$msg)
-    Write-Host "  `u{2717}  $msg" -ForegroundColor Red
+    Write-Host ("  " + [char]0x2717 + "  $msg") -ForegroundColor Red
     exit 1
 }
 
@@ -60,7 +60,7 @@ function Draw-Menu {
     foreach ($item in $items) {
         $w = $inner - 7
         Write-Host ("  " + [char]0x2502 + "  ") -NoNewline -ForegroundColor DarkGray
-        Write-Host "[$n]  " -NoNewline -ForegroundColor Blue
+        Write-Host "[$n]  " -NoNewline -ForegroundColor Cyan
         Write-Host $item.PadRight($w) -NoNewline
         Write-Host ([char]0x2502) -ForegroundColor DarkGray
         $n++
@@ -89,11 +89,11 @@ function Invoke-WithSpinner {
     Remove-Job $job -Force
 
     if ($failed) {
-        Write-Host ("`r  `u{2717}  " + $Label.PadRight(50)) -ForegroundColor Red
+        Write-Host ("`r  " + [char]0x2717 + "  " + $Label.PadRight(50)) -ForegroundColor Red
         if ($errMsg) { Write-Host "     $errMsg" -ForegroundColor Red }
         exit 1
     }
-    Write-Host ("`r  `u{2713}  " + $Label.PadRight(50)) -ForegroundColor Green
+    Write-Host ("`r  " + [char]0x2713 + "  " + $Label.PadRight(50)) -ForegroundColor Green
 }
 
 function Invoke-Compose {
@@ -160,17 +160,17 @@ function Merge-EnvFiles {
 function Print-Banner {
     Write-Host ""
     Write-Host ' _   _       _   _ ' -NoNewline -ForegroundColor White
-    Write-Host ' ______ _               ' -ForegroundColor Blue
+    Write-Host ' ______ _               ' -ForegroundColor Cyan
     Write-Host '| \ | |     | | (_)' -NoNewline -ForegroundColor White
-    Write-Host '|  ____| |              ' -ForegroundColor Blue
+    Write-Host '|  ____| |              ' -ForegroundColor Cyan
     Write-Host '|  \| | ___ | |_ _ ' -NoNewline -ForegroundColor White
-    Write-Host '| |__  | | _____      __' -ForegroundColor Blue
+    Write-Host '| |__  | | _____      __' -ForegroundColor Cyan
     Write-Host '| . ` |/ _ \| __| |' -NoNewline -ForegroundColor White
-    Write-Host '|  __| | |/ _ \ \ /\ / /' -ForegroundColor Blue
+    Write-Host '|  __| | |/ _ \ \ /\ / /' -ForegroundColor Cyan
     Write-Host '| |\  | (_) | |_| |' -NoNewline -ForegroundColor White
-    Write-Host '| |    | | (_) \ V  V / ' -ForegroundColor Blue
+    Write-Host '| |    | | (_) \ V  V / ' -ForegroundColor Cyan
     Write-Host '|_| \_|\___/ \__|_|' -NoNewline -ForegroundColor White
-    Write-Host '|_|    |_|\___/ \_/\_/  ' -ForegroundColor Blue
+    Write-Host '|_|    |_|\___/ \_/\_/  ' -ForegroundColor Cyan
     Write-Host ("                              v" + $script:VERSION) -ForegroundColor DarkGray
     Write-Hr
     Write-Host ""
@@ -256,7 +256,7 @@ if (Test-Path (Join-Path $INSTALL_DIR ".env")) {
 
     $MENU_CHOICE = $null
     while (-not $MENU_CHOICE) {
-        Write-Host ("  " + [char]0x25B6 + "  Choose [1-4]: ") -NoNewline -ForegroundColor Blue
+        Write-Host ("  " + [char]0x25B6 + "  Choose [1-4]: ") -NoNewline -ForegroundColor Cyan
         $MENU_CHOICE = Read-Host
     }
 
@@ -331,7 +331,7 @@ if (Test-Path (Join-Path $INSTALL_DIR ".env")) {
         "3" {
             Write-Host ""
             Write-Warn "This will stop all NotiFlow services and delete $INSTALL_DIR."
-            Write-Host ("  " + [char]0x25B6 + "  Type 'yes' to confirm: ") -NoNewline -ForegroundColor Blue
+            Write-Host ("  " + [char]0x25B6 + "  Type 'yes' to confirm: ") -NoNewline -ForegroundColor Cyan
             $CONFIRM = Read-Host
             Write-Host ""
             if ($CONFIRM -eq "yes") {
